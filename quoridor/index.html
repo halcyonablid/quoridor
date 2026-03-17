@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quoridor Local Arena</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Local Quoridor + AI Intent API</p>
+        <h1>Quoridor 对战与教学台</h1>
+        <p class="hero-copy">
+          本地规则引擎负责裁判，AI 只负责提议动作、解释原因和做教学总结。
+          你可以双人对战，也可以给任意一方接入你自己的大模型 API。
+        </p>
+      </div>
+      <div class="hero-actions">
+        <button id="new-game-btn" class="primary-btn">新开一局</button>
+        <button id="request-ai-btn" class="secondary-btn">当前方请求 AI 走子</button>
+        <button id="summary-btn" class="secondary-btn">生成教学总结</button>
+      </div>
+    </header>
+
+    <main class="main-layout">
+      <section class="board-panel card">
+        <div class="board-panel-head">
+          <div>
+            <h2>棋盘</h2>
+            <p id="turn-banner" class="muted"></p>
+          </div>
+          <div class="board-mode-controls">
+            <button id="move-mode-btn" class="mode-btn active">走子</button>
+            <button id="wall-mode-btn" class="mode-btn">放墙</button>
+            <div id="wall-orientation-wrap" class="wall-orientation-wrap">
+              <button id="wall-h-btn" class="mode-btn active">横墙</button>
+              <button id="wall-v-btn" class="mode-btn">竖墙</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="board-frame">
+          <div id="board-stage" class="board-stage" aria-label="Quoridor board"></div>
+        </div>
+
+        <div id="board-hint" class="board-hint muted"></div>
+      </section>
+
+      <aside class="sidebar">
+        <section class="card">
+          <h2>对局状态</h2>
+          <div id="status-grid" class="status-grid"></div>
+        </section>
+
+        <section class="card">
+          <h2>玩家设置</h2>
+          <div class="player-config-grid">
+            <div class="player-config">
+              <h3>玩家 1</h3>
+              <label class="field-label" for="player1-type">控制方式</label>
+              <select id="player1-type">
+                <option value="human">Human</option>
+                <option value="minimax">本地搜索 AI</option>
+                <option value="api">API AI</option>
+              </select>
+            </div>
+            <div class="player-config">
+              <h3>玩家 2</h3>
+              <label class="field-label" for="player2-type">控制方式</label>
+              <select id="player2-type">
+                <option value="human">Human</option>
+                <option value="minimax">本地搜索 AI</option>
+                <option value="api">API AI</option>
+              </select>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="section-title-row">
+            <h2>AI 配置</h2>
+            <span class="muted tiny">本地搜索 AI + MiniMax API / DeepSeek / OpenAI兼容</span>
+          </div>
+
+          <label class="field-label" for="api-provider">接口预设</label>
+          <select id="api-provider">
+            <option value="custom-openai">自定义 OpenAI 兼容</option>
+            <option value="deepseek">DeepSeek</option>
+            <option value="minimax-api">MiniMax API</option>
+          </select>
+
+          <label class="field-label" for="mcts-iterations">MCTS 迭代次数</label>
+          <input id="mcts-iterations" type="number" min="40" max="4000" step="20" value="240">
+
+          <label class="field-label" for="mcts-exploration">MCTS 探索系数</label>
+          <input id="mcts-exploration" type="number" min="0.2" max="4" step="0.1" value="1.4">
+
+          <label class="field-label" for="api-endpoint">API Endpoint</label>
+          <input id="api-endpoint" type="text" placeholder="https://api.openai.com/v1/chat/completions">
+
+          <label class="field-label" for="api-model">Model</label>
+          <input id="api-model" type="text" placeholder="gpt-4.1-mini / 你的模型名">
+
+          <label class="field-label" for="api-key">API Key</label>
+          <input id="api-key" type="password" placeholder="sk-...">
+
+          <label class="field-label" for="api-temperature">Temperature</label>
+          <input id="api-temperature" type="number" min="0" max="2" step="0.1" value="0.3">
+
+          <label class="field-label" for="api-retries">非法动作重试次数</label>
+          <input id="api-retries" type="number" min="1" max="6" step="1" value="3">
+
+          <label class="field-label" for="custom-headers">额外 Headers(JSON)</label>
+          <textarea id="custom-headers" rows="3" placeholder='{"X-Org":"demo"}'></textarea>
+
+          <label class="field-label" for="system-prompt">系统提示词补充</label>
+          <textarea id="system-prompt" rows="6" placeholder="你可以补充棋风、教学风格、语言风格等要求。"></textarea>
+
+          <div class="checkbox-row">
+            <label><input id="auto-summary" type="checkbox" checked> 对局结束后自动生成教学总结</label>
+          </div>
+
+          <div class="config-actions">
+            <button id="apply-provider-btn" class="secondary-btn">应用接口预设</button>
+            <button id="save-config-btn" class="secondary-btn">保存配置</button>
+            <button id="test-api-btn" class="secondary-btn">测试 API 连通</button>
+          </div>
+          <div id="api-health-panel" class="api-health-panel idle">
+            <div class="api-health-head">
+              <strong>连通性状态</strong>
+              <span id="api-health-badge" class="api-health-badge">未测试</span>
+            </div>
+            <div id="api-health-text" class="api-health-text muted">
+              请在填好 API Endpoint / Model / Key 后点“测试 API 连通”。
+            </div>
+          </div>
+          <p class="muted tiny">
+            如需接别的接口格式，可改 `app.js` 里的 `window.QuoridorAiApiAdapter` 扩展点。
+          </p>
+        </section>
+
+        <section class="card">
+          <div class="section-title-row">
+            <h2>Second Brain</h2>
+            <span id="knowledge-source" class="muted tiny">未加载</span>
+          </div>
+          <div id="knowledge-status" class="knowledge-status muted">
+            尚未加载棋类方法论与经验卡。
+          </div>
+          <div id="knowledge-list" class="knowledge-list empty">
+            当前局面还没有命中的 skill / 经验卡。
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>本回合解释</h2>
+          <div id="latest-explanation" class="explanation-panel empty">
+            暂无解释。AI 下出一步后，这里会展示原因、教学提示和回合摘要。
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>教学总结</h2>
+          <div id="summary-panel" class="summary-panel empty">
+            对局结束后可自动或手动生成总结。
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>对局记录</h2>
+          <div id="history-list" class="history-list"></div>
+        </section>
+
+        <section class="card">
+          <h2>系统日志</h2>
+          <div id="message-log" class="message-log"></div>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
